@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bakterizid</title>
+<style>
+@font-face { font-family: "Major Mono Display"; src: url("fonts/MajorMonoDisplay-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "IBM Plex Sans Condensed"; src: url("fonts/IBMPlexSansCondensed-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "IBM Plex Sans Condensed"; src: url("fonts/IBMPlexSansCondensed-SemiBold.ttf") format("truetype"); font-weight: 600; }
+@font-face { font-family: "IBM Plex Sans Condensed"; src: url("fonts/IBMPlexSansCondensed-Italic.ttf") format("truetype"); font-weight: 400 600; font-style: italic; }
+@font-face { font-family: "IBM Plex Mono"; src: url("fonts/IBMPlexMono-Regular.ttf") format("truetype"); font-weight: 400; }
+@font-face { font-family: "IBM Plex Mono"; src: url("fonts/IBMPlexMono-Medium.ttf") format("truetype"); font-weight: 500; }
+/* Layout: festes Plugin-Fenster 1080 × 720 wie ein VST-Editor. Kopfleiste mit Presets, links die Schale als XY-Feld, rechts drei Reglerzeilen, unten Tastatur und Statusleiste. Skaliert als Ganzes, nie Scrollen. Bewusst nur ein dunkles Thema. */
+:root {
+  --broth: #150b10;      /* Nährbouillon, Hintergrund */
+  --frame: #0e070b;      /* Kopf- und Statusleiste */
+  --panel: #1d1218;      /* Reglerfelder */
+  --line: #3f2731;       /* Kanten */
+  --fg: #f2e6dc;
+  --muted: #a8938b;
+  --agar: #e3a94b;
+  --violet: #8d6dff;     /* Kristallviolett, Gram-positiv */
+  --safranin: #ff5f88;   /* Safranin, Gram-negativ */
+  --mint: #8fdcc4;       /* Phagen-Fluoreszenz */
+  --key-white: #e6dacd;
+  --key-black: #24161c;
+  --stain: var(--safranin);
+  --slime: color-mix(in srgb, var(--stain) 28%, #2a1520);
+  --display: "Major Mono Display", "Courier New", monospace;
+  --body: "IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--broth); color: var(--fg); margin: 0; height: 100%; overflow: hidden; }
+body { font-family: var(--body); font-size: 14px; }
+.stage { position: fixed; inset: 0; }
+.plugin {
+  position: absolute; left: 0; top: 0; width: 1080px; height: 720px; transform-origin: 0 0;
+  display: grid; grid-template-rows: 52px 1fr 96px 28px; grid-template-columns: minmax(0, 1fr);
+  background: var(--broth); overflow: hidden;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+:focus-visible { outline: 2px solid var(--agar); outline-offset: 2px; }
+
+/* Kopfleiste */
+.bar { display: flex; align-items: center; gap: 10px; padding: 0 12px; overflow: hidden; background: var(--frame); border-bottom: 1px solid var(--line); }
+.mark { font-family: var(--display); font-weight: 400; font-size: 23px; margin: 0 6px 0 0; letter-spacing: -.02em; line-height: 1; }
+.mark span { color: var(--stain); transition: color .4s; }
+.group { display: flex; align-items: center; gap: 6px; }
+.group > .cap { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+.spacer { flex: 1; }
+.btn {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 3px;
+  height: 30px; padding: 0 12px; cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.sq { width: 30px; padding: 0; font-size: 13px; }
+.btn[aria-pressed="true"] { border-color: var(--stain); color: var(--stain); }
+.btn.kill { background: var(--safranin); border-color: var(--safranin); color: var(--broth); font-weight: 500; }
+.btn.kill:hover { background: var(--fg); border-color: var(--fg); }
+.btn.kill.fired { animation: zap .5s; }
+@keyframes zap { 30% { transform: scale(.93); } }
+select {
+  font-family: var(--mono); font-size: 12px; height: 30px; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 3px; padding: 0 8px;
+}
+#preset { width: 190px; }
+#tuning { width: 128px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--stain); flex: none; transition: background .4s; }
+.oct-val { font-family: var(--mono); font-size: 12px; width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
+
+/* Hauptfeld */
+.main { display: grid; grid-template-columns: 516px 1fr; gap: 14px; padding: 14px; min-height: 0; }
+.dish-panel { position: relative; display: grid; place-items: center; }
+#dish { width: 500px; height: 500px; display: block; touch-action: none; cursor: crosshair; }
+.panel-cap { position: absolute; left: 12px; top: 9px; font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.xy-cap { left: auto; right: 12px; }
+.power {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+  background: var(--fg); color: var(--broth); border: 0; border-radius: 999px; padding: 13px 20px; cursor: pointer;
+  box-shadow: 0 0 0 6px rgba(21, 11, 16, .6);
+}
+.power:hover { background: var(--agar); }
+
+.rows { display: grid; grid-auto-rows: auto; align-content: center; justify-content: center; gap: 10px; min-height: 0; }
+.row { display: grid; gap: 10px; min-height: 0; }
+.row.r2 { grid-template-columns: 1fr auto; }
+.sec { position: relative; display: flex; justify-content: center; align-items: center; gap: 2px; padding: 20px 10px 6px; }
+
+/* Schleim: eine gefilterte SVG-Ebene hinter allen Feldern außerhalb der Schale */
+.slime { position: absolute; left: 0; top: 0; width: 1080px; height: 720px; z-index: 0; pointer-events: none; }
+.slime .mass { fill: var(--slime); }
+.slime .bubbles circle { fill: url(#bubble); }
+.bar, .main, .keys, .status { position: relative; z-index: 1; }
+
+.ftype { display: grid; gap: 3px; margin-left: 6px; }
+.ftype button {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .06em; width: 34px; height: 21px; padding: 0; cursor: pointer;
+  background: rgba(14, 7, 11, .55); color: var(--muted); border: 1px solid rgba(255, 255, 255, .12); border-radius: 10px;
+}
+.ftype button[aria-pressed="true"] { color: var(--broth); background: var(--stain); border-color: var(--stain); }
+
+/* Drehregler */
+.knob { width: 84px; display: grid; justify-items: center; gap: 1px; cursor: ns-resize; border-radius: 4px; padding: 2px 0; touch-action: none; }
+.knob svg { width: 50px; height: 50px; overflow: visible; }
+.knob .kt { fill: none; stroke: rgba(10, 4, 8, .45); stroke-width: 4; stroke-linecap: round; }
+.knob .kf { fill: none; stroke: var(--stain); stroke-width: 4; stroke-linecap: round; transition: stroke .4s; }
+.knob .kc { fill: var(--broth); stroke: #4d3440; stroke-width: 1; }
+.knob .kp { stroke: var(--fg); stroke-width: 2.5; stroke-linecap: round; }
+.knob .kl { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.knob .kv { font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.knob:hover .kc, .knob.drag .kc { stroke: var(--muted); }
+.knob.drag .kv, .knob:focus-visible .kv { color: var(--fg); }
+
+.out { gap: 12px; padding-inline: 16px; }
+.meter { width: 10px; height: 82px; background: var(--broth); border: 1px solid var(--line); border-radius: 2px; position: relative; overflow: hidden; }
+.meter i { position: absolute; inset: 0; background: linear-gradient(to top, var(--mint) 0 70%, var(--agar) 70% 88%, var(--safranin) 88%); transform-origin: bottom; transform: scaleY(0); }
+
+/* Tastatur */
+.keys { position: relative; display: flex; margin: 0 14px; border-top: 1px solid var(--line); touch-action: none; }
+.key { position: relative; border: 0; padding: 0 0 6px; cursor: pointer; font-family: var(--mono); font-size: 10px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 1px; }
+.key.w { flex: 1; background: var(--key-white); color: var(--broth); border-right: 1px solid var(--broth); border-radius: 0 0 3px 3px; }
+.key.b { position: absolute; top: 0; height: 58%; width: 4.2%; background: var(--key-black); color: var(--muted); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 3px 3px; z-index: 2; }
+.key .n { opacity: .55; }
+.key.on { background: var(--stain); color: var(--broth); }
+
+/* Statusleiste */
+.status { display: flex; align-items: center; gap: 22px; padding: 0 16px; background: var(--frame); border-top: 1px solid var(--line); font-family: var(--mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.status b { color: var(--fg); font-weight: 500; }
+.status .help { margin-left: auto; }
+.note { max-width: 1080px; margin: 14px auto 0; color: var(--muted); font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="plugin" id="plugin">
+    <svg class="slime" viewBox="0 0 1080 720" aria-hidden="true">
+      <defs>
+        <filter id="goo" filterUnits="userSpaceOnUse" x="0" y="0" width="1080" height="720" color-interpolation-filters="sRGB">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+          <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -10" result="goo"/>
+          <feGaussianBlur in="goo" stdDeviation="3.5" result="bump"/>
+          <feSpecularLighting in="bump" surfaceScale="6" specularConstant="1.1" specularExponent="32" lighting-color="#fff6ec" result="spec">
+            <fePointLight x="-200" y="-300" z="600"/>
+          </feSpecularLighting>
+          <feComposite in="spec" in2="goo" operator="in" result="shine"/>
+          <feComposite in="goo" in2="shine" operator="arithmetic" k1="0" k2="1" k3=".75" k4="0"/>
+        </filter>
+        <radialGradient id="bubble" cx=".5" cy=".5" r=".5">
+          <stop offset=".6" stop-color="#fff" stop-opacity="0"/>
+          <stop offset=".92" stop-color="#fff" stop-opacity=".35"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <g class="mass" id="slime-mass" filter="url(#goo)"></g>
+      <g class="bubbles" id="slime-bubbles"></g>
+    </svg>
+    <header class="bar">
+      <h1 class="mark">bakteri<span>z</span>id</h1>
+      <div class="group">
+        <span class="dot"></span>
+        <button class="btn sq" id="prev" type="button" aria-label="Vorheriges Preset">‹</button>
+        <select id="preset" aria-label="Preset"></select>
+        <button class="btn sq" id="next" type="button" aria-label="Nächstes Preset">›</button>
+      </div>
+      <div class="group">
+        <span class="cap">Stimmung</span>
+        <select id="tuning" aria-label="Stimmung">
+          <option value="12">Terra 12</option>
+          <option value="19">Xeno 19</option>
+          <option value="bp">Bohlen-Pierce</option>
+          <option value="harm">Obertonreihe</option>
+        </select>
+      </div>
+      <div class="group">
+        <span class="cap">Oktave</span>
+        <button class="btn sq" id="oct-down" type="button" aria-label="Oktave tiefer">−</button>
+        <span class="oct-val" id="oct-val">0</span>
+        <button class="btn sq" id="oct-up" type="button" aria-label="Oktave höher">+</button>
+      </div>
+      <span class="spacer"></span>
+      <button id="arp" class="btn" type="button" aria-pressed="false">Zellteilung</button>
+      <button id="kill" class="btn kill" type="button">Bakterizid</button>
+    </header>
+
+    <div class="main">
+      <section class="dish-panel" aria-label="Petrischale">
+        <span class="panel-cap">Petrischale</span>
+        <span class="panel-cap xy-cap">X Tonhöhe · Y Membran</span>
+        <canvas id="dish" aria-label="Petrischale: tippen und ziehen spielt Töne"></canvas>
+      </section>
+      <div class="rows">
+        <div class="row"><section class="sec" id="g-erreger"><span class="panel-cap">Erreger</span></section></div>
+        <div class="row"><section class="sec" id="g-huelle"><span class="panel-cap">Wachstumskurve</span></section></div>
+        <div class="row r2">
+          <section class="sec" id="g-membran"><span class="panel-cap">Membran</span>
+            <div class="ftype" id="ftype" role="group" aria-label="Filtertyp">
+              <button type="button" data-t="lowpass" title="Tiefpass">TP</button>
+              <button type="button" data-t="bandpass" title="Bandpass">BP</button>
+              <button type="button" data-t="highpass" title="Hochpass">HP</button>
+            </div>
+          </section>
+          <section class="sec out" id="g-out"><span class="panel-cap">Ausgang</span><div class="meter" aria-hidden="true"><i id="meter"></i></div></section>
+        </div>
+        <div class="row"><section class="sec" id="g-umwelt"><span class="panel-cap">Umwelt</span></section></div>
+      </div>
+    </div>
+
+    <div class="keys" id="keys"></div>
+
+    <footer class="status">
+      <span>Kolonien <b id="r-cfu">0</b> KBE</span>
+      <span>Stimmen <b id="r-voices">0</b>/8</span>
+      <span>Phase <b id="r-phase">stationär</b></span>
+      <span class="help">Regler: ziehen · Shift fein · Doppelklick Standard · Mausrad</span>
+    </footer>
+  </div>
+</div>
+
+
+<script>
+(() => {
+  /* ---------- Verbindung zum Plugin ---------- */
+  const backend = window.__JUCE__ && window.__JUCE__.backend;
+  const send = (id, payload) => { try { if (backend) backend.emitEvent(id, payload ?? {}); } catch (e) {} };
+  const listen = (id, fn) => { if (backend) backend.addEventListener(id, fn); };
+
+  const css = getComputedStyle(document.documentElement);
+  const C = n => css.getPropertyValue(n).trim();
+  const COL = { pos: C('--violet'), neg: C('--safranin'), spore: C('--agar'), phage: C('--mint') };
+  const FTYPES = ['lowpass', 'bandpass', 'highpass'];
+  const TUNINGS = ['12', '19', 'bp', 'harm'];
+
+  // Startwerte, bis das Plugin die echten schickt
+  const P = { ratio: 3.17, index: 6, ring: .45, mutation: 40, cutoff: 3200, q: 12, lyse: .3, attack: .02, decay: 1.2, sustain: .65,
+              release: 1.4, penv: 0, noise: 0, echo: .4, feedback: .6, rate: 180, vol: .8, ftype: 0, octave: 0, tuning: 0, arp: 0 };
+  const DEF = { ...P };
+  let presets = [], curPreset = -1, modified = false, stain = 'neg', captureDef = false;
+  let voicesActive = 0, peak = 0, scope = null;
+
+  const dec = (v, d) => v.toFixed(d).replace('.', ',');
+  const pct = v => Math.round(v * 100) + ' %';
+  const hz = v => v >= 1000 ? dec(v / 1000, 1) + ' kHz' : Math.round(v) + ' Hz';
+  const ms = v => v >= 1 ? dec(v, 2) + ' s' : Math.round(v * 1000) + ' ms';
+  const SPEC = [
+    { k: 'ratio', g: 'erreger', l: 'Kultur', s: 'FM-Verhältnis', min: .25, max: 8, step: .01, f: v => dec(v, 2) + ' ×' },
+    { k: 'index', g: 'erreger', l: 'Toxizität', s: 'Modulationsindex', min: 0, max: 14, step: .1, f: v => dec(v, 1) },
+    { k: 'ring', g: 'erreger', l: 'Plasmid', s: 'Ringmodulation', min: 0, max: 1, step: .01, f: pct },
+    { k: 'mutation', g: 'erreger', l: 'Mutation', s: 'Tonhöhendrift', min: 0, max: 200, step: 1, f: v => '± ' + v + ' ¢' },
+    { k: 'attack', g: 'huelle', l: 'Latenz', s: 'Einschwingzeit', min: .001, max: 2, log: true, f: ms },
+    { k: 'decay', g: 'huelle', l: 'Zerfall', s: 'Abklingzeit', min: .01, max: 6, log: true, f: ms },
+    { k: 'sustain', g: 'huelle', l: 'Haftung', s: 'Haltepegel', min: 0, max: 1, step: .01, f: pct },
+    { k: 'release', g: 'huelle', l: 'Absterben', s: 'Ausklingzeit', min: .03, max: 6, log: true, f: ms },
+    { k: 'cutoff', g: 'membran', l: 'Durchlass', s: 'Filterfrequenz', min: 80, max: 12000, log: true, f: hz },
+    { k: 'q', g: 'membran', l: 'Resonanz', s: 'Filtergüte', min: .5, max: 24, step: .1, f: v => 'Q ' + dec(v, 1) },
+    { k: 'lyse', g: 'membran', l: 'Lyse', s: 'Sättigung', min: 0, max: 1, step: .01, f: pct },
+    { k: 'vol', g: 'out', l: 'Pegel', s: 'Ausgangspegel', min: 0, max: 1, step: .01, f: v => v < .005 ? '−∞ dB' : dec(20 * Math.log10(v / .8), 1) + ' dB' },
+    { k: 'penv', g: 'umwelt', l: 'Schock', s: 'Tonhöhen-Hüllkurve', min: 0, max: 48, step: 1, f: v => '+' + v + ' HT' },
+    { k: 'noise', g: 'umwelt', l: 'Sporen', s: 'Rauschanteil', min: 0, max: 1, step: .01, f: pct },
+    { k: 'echo', g: 'umwelt', l: 'Generationen', s: 'Echo-Anteil', min: 0, max: 1, step: .01, f: pct },
+    { k: 'feedback', g: 'umwelt', l: 'Vererbung', s: 'Echo-Rückkopplung', min: 0, max: .9, step: .01, f: pct },
+    { k: 'rate', g: 'umwelt', l: 'Teilung', s: 'Takt der Zellteilung', min: 70, max: 900, step: 1, f: v => v + ' ms' },
+  ];
+
+  /* ---------- Fenster skalieren: immer ganz sichtbar ---------- */
+  const plugin = document.getElementById('plugin');
+  function fit() {
+    const s = Math.min(innerWidth / 1080, innerHeight / 720);
+    plugin.style.transform = `scale(${s})`;
+    plugin.style.left = (innerWidth - 1080 * s) / 2 + 'px';
+    plugin.style.top = (innerHeight - 720 * s) / 2 + 'px';
+  }
+  addEventListener('resize', fit);
+  fit();
+
+  /* ---------- Drehregler ---------- */
+  const knobs = {};
+  const norm = (s, v) => s.log ? Math.log(v / s.min) / Math.log(s.max / s.min) : (v - s.min) / (s.max - s.min);
+  function denorm(s, n) {
+    n = Math.min(1, Math.max(0, n));
+    let v = s.log ? s.min * Math.pow(s.max / s.min, n) : s.min + n * (s.max - s.min);
+    if (s.step) v = Math.round(v / s.step) * s.step;
+    return v;
+  }
+  const A0 = -135, SWEEP = 270;
+  function arc(a0, a1, r) {
+    const p = a => [30 + r * Math.sin(a * Math.PI / 180), 30 - r * Math.cos(a * Math.PI / 180)];
+    const [x0, y0] = p(a0), [x1, y1] = p(a1);
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  }
+  function renderKnob(s) {
+    const k = knobs[s.k], n = Math.min(1, Math.max(0, norm(s, P[s.k]))), a = A0 + n * SWEEP;
+    k.fill.setAttribute('d', n > .002 ? arc(A0, a, 25) : '');
+    k.ptr.setAttribute('transform', `rotate(${a.toFixed(1)} 30 30)`);
+    k.val.textContent = s.f(P[s.k]);
+    k.el.setAttribute('aria-valuenow', Math.round(n * 100));
+    k.el.setAttribute('aria-valuetext', s.f(P[s.k]));
+  }
+  function setKnob(s, n) {
+    const v = denorm(s, n);
+    if (v === P[s.k]) return;
+    P[s.k] = v;
+    renderKnob(s);
+    send('param', { id: s.k, value: v });
+    if (!['rate', 'vol'].includes(s.k)) markModified();
+  }
+  function setOnce(s, n) {
+    send('gesture', { id: s.k, on: true });
+    setKnob(s, n);
+    send('gesture', { id: s.k, on: false });
+  }
+  SPEC.forEach(s => {
+    const el = document.createElement('div');
+    el.className = 'knob';
+    el.tabIndex = 0;
+    el.setAttribute('role', 'slider');
+    el.setAttribute('aria-label', `${s.l}, ${s.s}`);
+    el.setAttribute('aria-valuemin', '0');
+    el.setAttribute('aria-valuemax', '100');
+    el.title = s.s;
+    el.innerHTML = `<svg viewBox="0 0 60 60" aria-hidden="true"><path class="kt" d="${arc(A0, A0 + SWEEP, 25)}"/><path class="kf"/>
+      <circle class="kc" cx="30" cy="30" r="17"/><line class="kp" x1="30" y1="30" x2="30" y2="16"/></svg>
+      <span class="kl">${s.l}</span><span class="kv"></span>`;
+    const box = document.getElementById('g-' + s.g);
+    box.insertBefore(el, box.querySelector('.meter, .ftype'));
+    knobs[s.k] = { el, fill: el.querySelector('.kf'), ptr: el.querySelector('.kp'), val: el.querySelector('.kv') };
+    renderKnob(s);
+
+    let startY = 0, startN = 0;
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault(); el.focus();
+      el.setPointerCapture(e.pointerId);
+      startY = e.clientY; startN = norm(s, P[s.k]);
+      el.classList.add('drag');
+      send('gesture', { id: s.k, on: true });
+    });
+    el.addEventListener('pointermove', e => {
+      if (!el.hasPointerCapture(e.pointerId)) return;
+      const sens = e.shiftKey ? .0008 : .005;
+      setKnob(s, startN + (startY - e.clientY) * sens);
+      if (e.shiftKey) { startY = e.clientY; startN = norm(s, P[s.k]); }
+    });
+    const up = e => {
+      if (!el.classList.contains('drag')) return;
+      el.classList.remove('drag');
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+      send('gesture', { id: s.k, on: false });
+    };
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('dblclick', () => setOnce(s, norm(s, DEF[s.k])));
+    el.addEventListener('wheel', e => {
+      e.preventDefault();
+      setOnce(s, norm(s, P[s.k]) - Math.sign(e.deltaY) * (e.shiftKey ? .005 : .025));
+    }, { passive: false });
+    el.addEventListener('keydown', e => {
+      const st = e.shiftKey ? .002 : .01, n = norm(s, P[s.k]);
+      const map = { ArrowUp: n + st, ArrowRight: n + st, ArrowDown: n - st, ArrowLeft: n - st, PageUp: n + .1, PageDown: n - .1, Home: 0, End: 1 };
+      if (e.key in map) { e.preventDefault(); e.stopPropagation(); setOnce(s, map[e.key]); }
+    });
+  });
+  const syncKnobs = () => SPEC.forEach(renderKnob);
+  const sendParam = (id, value) => { send('gesture', { id, on: true }); send('param', { id, value }); send('gesture', { id, on: false }); };
+
+  /* ---------- Presets ---------- */
+  const presetSel = document.getElementById('preset');
+  function buildPresetList() {
+    presetSel.innerHTML = '';
+    presets.forEach((pr, i) => {
+      let grp = [...presetSel.children].find(g => g.label === pr.cat);
+      if (!grp) { grp = document.createElement('optgroup'); grp.label = pr.cat; presetSel.appendChild(grp); }
+      grp.appendChild(new Option(pr.name, i));
+    });
+  }
+  function setStain(st) {
+    stain = COL[st] ? st : 'neg';
+    document.documentElement.style.setProperty('--stain', COL[stain]);
+  }
+  function showPreset(i) {
+    if (i < 0 || i >= presets.length) return;
+    if (curPreset >= 0 && presetSel.options[curPreset]) presetSel.options[curPreset].text = presets[curPreset].name;
+    curPreset = i; modified = false; captureDef = true;
+    presetSel.value = String(i);
+    setStain(presets[i].stain);
+  }
+  function markModified() {
+    if (modified || curPreset < 0) return;
+    modified = true;
+    presetSel.options[curPreset].text = presets[curPreset].name + ' *';
+  }
+  function choosePreset(i) {
+    send('program', { index: i });
+    showPreset(i);
+  }
+  presetSel.addEventListener('change', () => choosePreset(+presetSel.value));
+  document.getElementById('prev').addEventListener('click', () => presets.length && choosePreset((curPreset + presets.length - 1) % presets.length));
+  document.getElementById('next').addEventListener('click', () => presets.length && choosePreset((curPreset + 1) % presets.length));
+
+  /* ---------- Filtertyp, Stimmung, Oktave, Zellteilung ---------- */
+  const ftBtns = [...document.querySelectorAll('#ftype button')];
+  const renderFtype = () => ftBtns.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === FTYPES[P.ftype])));
+  ftBtns.forEach(b => b.addEventListener('click', () => {
+    const i = FTYPES.indexOf(b.dataset.t);
+    if (P.ftype === i) return;
+    P.ftype = i; renderFtype(); sendParam('ftype', i); markModified();
+  }));
+
+  const tuningSel = document.getElementById('tuning');
+  tuningSel.addEventListener('change', () => { P.tuning = TUNINGS.indexOf(tuningSel.value); sendParam('tuning', P.tuning); buildLabels(); });
+
+  const octVal = document.getElementById('oct-val');
+  const renderOct = () => { octVal.textContent = (P.octave > 0 ? '+' : '') + P.octave; buildLabels(); };
+  function setOct(d) {
+    const o = Math.max(-2, Math.min(2, P.octave + d));
+    if (o === P.octave) return;
+    P.octave = o; renderOct(); sendParam('octave', o);
+  }
+  document.getElementById('oct-down').addEventListener('click', () => setOct(-1));
+  document.getElementById('oct-up').addEventListener('click', () => setOct(1));
+
+  const arpBtn = document.getElementById('arp');
+  const renderArp = () => arpBtn.setAttribute('aria-pressed', String(P.arp > .5));
+  arpBtn.addEventListener('click', () => { P.arp = P.arp > .5 ? 0 : 1; renderArp(); sendParam('arp', P.arp); });
+
+  const killBtn = document.getElementById('kill');
+  function killVisual() {
+    killBtn.classList.remove('fired'); void killBtn.offsetWidth; killBtn.classList.add('fired');
+    colonies.forEach(c => { c.dead = true; c.active = false; });
+    keyEls.forEach(k => k.classList.remove('on'));
+  }
+  killBtn.addEventListener('click', () => { send('kill'); P.arp = 0; renderArp(); killVisual(); });
+
+  function applyParams(obj) {
+    Object.keys(obj).forEach(k => { P[k] = +obj[k]; });
+    syncKnobs(); renderFtype(); renderArp();
+    tuningSel.value = TUNINGS[P.tuning] || '12';
+    renderOct();
+  }
+
+  /* ---------- Petrischale ---------- */
+  const cv = document.getElementById('dish'), g2 = cv.getContext('2d');
+  const DISH = 500;
+  let W = 0, R = 0, cx = 0, cy = 0, dpr = 1;
+  const colonies = [];
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const base = document.createElement('canvas'), gloss = document.createElement('canvas');
+
+  function ring(g, r0, r1) { g.beginPath(); g.arc(cx, cy, r1, 0, Math.PI * 2); g.arc(cx, cy, r0, 0, Math.PI * 2, true); }
+
+  // Statische Ebenen: Schale mit Agar darunter, Glasreflexe des Deckels darüber
+  function buildDish() {
+    base.width = base.height = gloss.width = gloss.height = W;
+    const b = base.getContext('2d');
+    b.save();
+    b.shadowColor = 'rgba(0,0,0,.7)'; b.shadowBlur = 34 * dpr; b.shadowOffsetY = 10 * dpr;
+    b.fillStyle = 'rgba(20,10,14,1)';
+    b.beginPath(); b.arc(cx, cy, R * 1.07, 0, Math.PI * 2); b.fill();
+    b.restore();
+    const wall = b.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+    wall.addColorStop(0, 'rgba(255,248,240,.30)'); wall.addColorStop(.5, 'rgba(255,248,240,.08)'); wall.addColorStop(1, 'rgba(255,248,240,.18)');
+    b.fillStyle = wall; ring(b, R * .995, R * 1.07); b.fill('evenodd');
+    const agar = b.createRadialGradient(cx - R * .22, cy - R * .28, R * .05, cx, cy, R);
+    agar.addColorStop(0, 'rgba(238,190,110,.78)');
+    agar.addColorStop(.55, 'rgba(214,150,66,.70)');
+    agar.addColorStop(.9, 'rgba(160,98,40,.74)');
+    agar.addColorStop(1, 'rgba(96,52,22,.85)');
+    b.fillStyle = agar; b.beginPath(); b.arc(cx, cy, R, 0, Math.PI * 2); b.fill();
+    const noise = document.createElement('canvas'); noise.width = noise.height = 128;
+    const ng = noise.getContext('2d'), id = ng.createImageData(128, 128);
+    for (let i = 0; i < id.data.length; i += 4) { const v = Math.random() * 255; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 255; }
+    ng.putImageData(id, 0, 0);
+    b.save();
+    b.beginPath(); b.arc(cx, cy, R, 0, Math.PI * 2); b.clip();
+    b.globalAlpha = .07; b.globalCompositeOperation = 'overlay';
+    b.fillStyle = b.createPattern(noise, 'repeat'); b.fillRect(0, 0, W, W);
+    b.restore();
+    b.strokeStyle = 'rgba(255,232,190,.32)'; b.lineWidth = 2.5 * dpr;
+    b.beginPath(); b.arc(cx, cy, R * .975, 0, Math.PI * 2); b.stroke();
+    b.save();
+    b.translate(cx, cy); b.rotate(-.42);
+    b.fillStyle = 'rgba(38,52,140,.78)';
+    b.font = `italic 600 ${15 * dpr}px "IBM Plex Sans Condensed", "Arial Narrow", sans-serif`;
+    b.textAlign = 'center';
+    b.fillText('B-7 · LB · 37 °C · 22.10.', 0, R * .86);
+    b.restore();
+
+    const g = gloss.getContext('2d');
+    g.strokeStyle = 'rgba(255,250,244,.45)'; g.lineWidth = 1 * dpr;
+    g.beginPath(); g.arc(cx, cy, R * 1.07, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = 'rgba(255,250,244,.22)';
+    g.beginPath(); g.arc(cx, cy, R * 1.0, 0, Math.PI * 2); g.stroke();
+    const sheen = g.createRadialGradient(cx - R * .45, cy - R * .5, 0, cx - R * .45, cy - R * .5, R * .7);
+    sheen.addColorStop(0, 'rgba(255,255,255,.16)'); sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = sheen; g.beginPath(); g.arc(cx, cy, R * 1.06, 0, Math.PI * 2); g.fill();
+    g.lineCap = 'round';
+    g.strokeStyle = 'rgba(255,255,255,.42)'; g.lineWidth = 5 * dpr;
+    g.beginPath(); g.arc(cx, cy, R * 1.035, Math.PI * 1.08, Math.PI * 1.36); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 3 * dpr;
+    g.beginPath(); g.arc(cx, cy, R * .94, Math.PI * 1.12, Math.PI * 1.24); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 4 * dpr;
+    g.beginPath(); g.arc(cx, cy, R * 1.035, Math.PI * .12, Math.PI * .26); g.stroke();
+  }
+
+  function resize() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = DISH * dpr; cv.width = cv.height = W;
+    cx = cy = W / 2; R = W * .42;
+    buildDish();
+  }
+  resize();
+  if (document.fonts) document.fonts.ready.then(buildDish);
+
+  function rng(seed) { return () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }; }
+
+  function spawnColony(step, pos, rand = Math.random, st = stain, grown) {
+    let x, y;
+    if (pos) { x = pos.x; y = pos.y; }
+    else {
+      const a = (((step % 17) + 17) % 17) / 17 * Math.PI * 2 - Math.PI / 2 + (rand() - .5) * .5;
+      const d = .18 + rand() * .62;
+      x = Math.cos(a) * d; y = Math.sin(a) * d;
+    }
+    const jit = Array.from({ length: 22 }, () => .82 + rand() * .3);
+    const target = .025 + rand() * .045;
+    const c = { x, y, r: grown ? target : .004, target, jit, rot: rand() * 6.28, color: COL[st], active: true, dead: false, alpha: 1 };
+    colonies.push(c);
+    if (colonies.length > 90) colonies.shift();
+    return c;
+  }
+  (() => {
+    const r = rng(37);
+    const st = ['neg', 'neg', 'pos', 'spore', 'neg', 'phage'];
+    for (let i = 0; i < 16; i++) { const c = spawnColony(Math.floor(r() * 17), null, r, st[i % st.length], true); c.active = false; }
+  })();
+
+  function drawColony(c) {
+    const rr = c.r * R, x = cx + c.x * R, y = cy + c.y * R;
+    const tt = performance.now() / 1000;
+    g2.save();
+    const n = c.jit.length;
+    const col = c.dead ? '#6b5a55' : c.color;
+    g2.globalAlpha = c.alpha * .22;
+    g2.fillStyle = col;
+    g2.beginPath(); g2.arc(x, y, rr * 1.28, 0, Math.PI * 2); g2.fill();
+    const path = new Path2D();
+    for (let i = 0; i <= n; i++) {
+      const a = i / n * Math.PI * 2 + c.rot;
+      const wob = reduced ? 1 : 1 + (c.active ? .07 : .015) * Math.sin(tt * 3 + i * 1.7);
+      const r = rr * c.jit[i % n] * wob;
+      i ? path.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r) : path.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    path.closePath();
+    const dome = g2.createRadialGradient(x - rr * .3, y - rr * .3, 0, x, y, rr * 1.1);
+    dome.addColorStop(0, 'rgba(255,246,236,.9)'); dome.addColorStop(.38, col); dome.addColorStop(1, col);
+    if (c.active && !c.dead) { g2.shadowColor = col; g2.shadowBlur = 20 * dpr; }
+    else { g2.shadowColor = 'rgba(40,16,8,.55)'; g2.shadowBlur = 4 * dpr; g2.shadowOffsetY = 1.5 * dpr; }
+    g2.globalAlpha = c.alpha * (c.active ? .97 : .86);
+    g2.fillStyle = dome; g2.fill(path);
+    g2.shadowColor = 'transparent'; g2.shadowBlur = 0; g2.shadowOffsetY = 0;
+    g2.strokeStyle = 'rgba(30,10,14,.35)'; g2.lineWidth = 1 * dpr; g2.stroke(path);
+    g2.globalAlpha = c.alpha * .7;
+    g2.fillStyle = '#fffaf2';
+    g2.beginPath(); g2.ellipse(x - rr * .32, y - rr * .36, rr * .2, rr * .12, -.7, 0, Math.PI * 2); g2.fill();
+    g2.restore();
+  }
+
+  const meterEl = document.getElementById('meter');
+  let swab = null, shownPeak = 0;
+  function draw() {
+    g2.clearRect(0, 0, W, W);
+    g2.drawImage(base, 0, 0);
+    for (let i = colonies.length - 1; i >= 0; i--) {
+      const c = colonies[i];
+      if (c.dead) { c.r *= .985; c.alpha *= .965; if (c.alpha < .02) { colonies.splice(i, 1); continue; } }
+      else c.r += (c.target * (c.active ? 1.25 : 1) - c.r) * (c.active ? .05 : .01);
+    }
+    colonies.forEach(drawColony);
+    shownPeak = Math.max(peak, shownPeak * .92);
+    meterEl.style.transform = `scaleY(${Math.min(1, shownPeak).toFixed(3)})`;
+    if (scope && scope.length) {
+      g2.strokeStyle = COL[stain];
+      g2.lineWidth = 1.6 * dpr; g2.globalAlpha = .9;
+      g2.beginPath();
+      const n = scope.length;
+      for (let i = 0; i <= n; i++) {
+        const s = scope[i % n];
+        const a = i / n * Math.PI * 2 - Math.PI / 2, r = R * (.92 + s * .12);
+        const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+        i ? g2.lineTo(px, py) : g2.moveTo(px, py);
+      }
+      g2.stroke(); g2.globalAlpha = 1;
+    }
+    g2.drawImage(gloss, 0, 0);
+    if (swab) {
+      g2.strokeStyle = 'rgba(242,230,220,.8)'; g2.lineWidth = 1 * dpr;
+      g2.beginPath(); g2.arc(cx + swab.x * R, cy + swab.y * R, 14 * dpr, 0, Math.PI * 2); g2.stroke();
+    }
+    updateReadouts();
+    requestAnimationFrame(draw);
+  }
+
+  let lastRead = '';
+  const rCfu = document.getElementById('r-cfu'), rVoices = document.getElementById('r-voices'), rPhase = document.getElementById('r-phase');
+  function updateReadouts() {
+    const alive = colonies.filter(c => !c.dead).length, dying = colonies.length - alive;
+    const phase = voicesActive ? 'exponentiell' : dying ? 'Absterbephase' : alive ? 'stationär' : 'Latenzphase';
+    const s = alive + '|' + voicesActive + '|' + phase;
+    if (s === lastRead) return;
+    lastRead = s;
+    rCfu.textContent = alive; rVoices.textContent = voicesActive; rPhase.textContent = phase;
+  }
+
+  // Abstrich: Ziehen in der Schale spielt einen gleitenden Ton
+  function dishPos(e) {
+    const b = cv.getBoundingClientRect();
+    const x = ((e.clientX - b.left) / b.width * W - cx) / R, y = ((e.clientY - b.top) / b.height * W - cy) / R;
+    const d = Math.hypot(x, y), m = d > .9 ? .9 / d : 1;
+    return { x: x * m, y: y * m };
+  }
+  let lastSpawn = 0, swabColony = null;
+  cv.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    cv.setPointerCapture(e.pointerId);
+    swab = dishPos(e);
+    send('swab', { phase: 'on', x: swab.x, y: swab.y });
+    swabColony = spawnColony(0, { ...swab });
+    lastSpawn = performance.now();
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!swab) return;
+    swab = dishPos(e);
+    send('swab', { phase: 'move', x: swab.x, y: swab.y });
+    const now = performance.now();
+    if (now - lastSpawn > 120) {
+      lastSpawn = now;
+      if (swabColony) swabColony.active = false;
+      swabColony = spawnColony(0, { ...swab });
+    }
+  });
+  const endSwab = () => {
+    if (!swab) return;
+    swab = null;
+    send('swab', { phase: 'off', x: 0, y: 0 });
+    if (swabColony) swabColony.active = false;
+  };
+  cv.addEventListener('pointerup', endSwab);
+  cv.addEventListener('pointercancel', endSwab);
+
+  /* ---------- Tastatur ---------- */
+  const NKEYS = 25;
+  const CODES = ['KeyA', 'KeyW', 'KeyS', 'KeyE', 'KeyD', 'KeyF', 'KeyT', 'KeyG', 'KeyY', 'KeyH', 'KeyU', 'KeyJ', 'KeyK', 'KeyO', 'KeyL', 'KeyP', 'Semicolon'];
+  const LABELS = ['A', 'W', 'S', 'E', 'D', 'F', 'T', 'G', 'Z', 'H', 'U', 'J', 'K', 'O', 'L', 'P', 'Ö'];
+  const NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'H'];
+  const isBlack = s => [1, 3, 6, 8, 10].includes(s % 12);
+  const keysEl = document.getElementById('keys'), keyEls = [], held = new Set();
+  const whiteCount = [...Array(NKEYS).keys()].filter(s => !isBlack(s)).length;
+  let whiteIdx = 0;
+  for (let s = 0; s < NKEYS; s++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.tabIndex = -1;
+    const black = isBlack(s);
+    b.className = 'key ' + (black ? 'b' : 'w');
+    if (black) b.style.left = `calc(${whiteIdx / whiteCount * 100}% - 2.1%)`; else whiteIdx++;
+    b.innerHTML = `<span class="n"></span><span>${LABELS[s] ?? ''}</span>`;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); keyDown(s); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => keyUp(s)));
+    keysEl.appendChild(b);
+    keyEls.push(b);
+  }
+  function buildLabels() {
+    const twelve = TUNINGS[P.tuning] === '12';
+    keyEls.forEach((b, s) => {
+      const name = twelve ? NAMES[s % 12] + (3 + P.octave + Math.floor(s / 12)) : 'S' + s;
+      b.querySelector('.n').textContent = isBlack(s) && twelve ? '' : name;
+      b.setAttribute('aria-label', twelve ? NAMES[s % 12] : 'Stufe ' + s);
+    });
+  }
+  buildLabels();
+  function keyDown(s) {
+    if (held.has(s)) return;
+    held.add(s);
+    keyEls[s].classList.add('on');
+    send('note', { s, on: true });
+  }
+  function keyUp(s) {
+    if (!held.has(s)) return;
+    held.delete(s);
+    keyEls[s].classList.remove('on');
+    send('note', { s, on: false });
+  }
+  function flashKey(s) {
+    if (s < 0 || s >= NKEYS || held.has(s)) return;
+    keyEls[s].classList.add('on');
+    setTimeout(() => { if (!held.has(s)) keyEls[s].classList.remove('on'); }, 140);
+  }
+
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+    if (e.target.tagName === 'SELECT') return;
+    const s = CODES.indexOf(e.code);
+    if (s >= 0) { e.preventDefault(); keyDown(s); return; }
+    if (e.code === 'KeyZ') setOct(-1);
+    if (e.code === 'KeyX') setOct(1);
+  });
+  addEventListener('keyup', e => { const s = CODES.indexOf(e.code); if (s >= 0) keyUp(s); });
+  addEventListener('blur', () => [...held].forEach(keyUp));
+
+  /* ---------- Schleim um Felder und Schale ---------- */
+  function buildSlime() {
+    const r = rng(11), f = n => n.toFixed(1);
+    let m = '', bub = '';
+    const rect = (x, y, w, h, rad) => { m += `<rect x="${f(x)}" y="${f(y)}" width="${f(w)}" height="${f(h)}" rx="${f(rad)}"/>`; };
+    const circ = (x, y, rad) => { m += `<circle cx="${f(x)}" cy="${f(y)}" r="${f(rad)}"/>`; };
+    const drip = (x, y, len, w) => { rect(x - w / 2, y - 8, w, len + 8, w / 2); circ(x, y + len - w * .2, w * .8); };
+
+    rect(-20, 36, 1120, 22, 0);
+    for (let x = 18 + r() * 30; x < 1070; x += 34 + r() * 80) drip(x, 54, 8 + r() * 46, 6 + r() * 9);
+
+    const pr = plugin.getBoundingClientRect(), sc = pr.width / 1080;
+    if (!sc || !document.querySelector('.dish-panel').getBoundingClientRect().width) return;   // noch kein Layout
+    const rel = el => { const b = el.getBoundingClientRect(); return { x: (b.left - pr.left) / sc, y: (b.top - pr.top) / sc, w: b.width / sc, h: b.height / sc }; };
+    const dp = document.querySelector('.dish-panel'), dr = rel(dp);
+    const dish = { x: dr.x + dr.w / 2, y: dr.y + dr.h / 2, r: DISH * .42 * 1.1 };
+    const boxes = [dp, ...document.querySelectorAll('.sec')].map((el, i) => {
+      const pad = i ? 4 : -6, b = rel(el);
+      const x = b.x - pad, y = b.y - pad, w = b.w + pad * 2, h = b.h + pad * 2;
+      rect(x, y, w, h, i ? 26 : 60);
+      const per = 2 * (w + h);
+      for (let k = 0; k < per / 22; k++) {
+        const t = r() * per;
+        const [px, py] = t < w ? [x + t, y] : t < w + h ? [x + w, y + t - w] : t < 2 * w + h ? [x + t - w - h, y + h] : [x, y + t - 2 * w - h];
+        circ(px, py, 3 + r() * 10);
+      }
+      const nd = 1 + Math.floor(r() * 3);
+      for (let k = 0; k < nd; k++) drip(x + 24 + r() * (w - 48), y + h - 4, 8 + r() * 24, 5 + r() * 7);
+      for (let k = 0; k < w * h / 7000; k++) {
+        const bx = x + 8 + r() * (w - 16), by = y + 8 + r() * (h - 16);
+        if (Math.hypot(bx - dish.x, by - dish.y) < dish.r + 10) continue;
+        bub += `<circle cx="${f(bx)}" cy="${f(by)}" r="${f(1.5 + r() * 4.5)}"/>`;
+      }
+      return { x, y, w, h };
+    });
+    boxes.forEach((a, i) => boxes.forEach((c, j) => {
+      if (j <= i) return;
+      const gapY = c.y - (a.y + a.h), gapX = c.x - (a.x + a.w);
+      const ox0 = Math.max(a.x, c.x), ox1 = Math.min(a.x + a.w, c.x + c.w);
+      const oy0 = Math.max(a.y, c.y), oy1 = Math.min(a.y + a.h, c.y + c.h);
+      if (gapY > -30 && gapY < 70 && ox1 - ox0 > 40) {
+        for (let k = 0; k < 2 + r() * 2; k++) { const w = 6 + r() * 16, x = ox0 + 20 + r() * (ox1 - ox0 - 40); rect(x - w / 2, a.y + a.h - 12, w, gapY + 24, w / 2); }
+      } else if (gapX > -30 && gapX < 90 && oy1 - oy0 > 30) {
+        for (let k = 0; k < 2 + r() * 2; k++) { const h = 6 + r() * 14, y = oy0 + 14 + r() * (oy1 - oy0 - 28); rect(a.x + a.w - 12, y - h / 2, gapX + 24, h, h / 2); }
+      }
+    }));
+    document.getElementById('slime-mass').innerHTML = m;
+    document.getElementById('slime-bubbles').innerHTML = bub;
+  }
+  let slimeTimer = 0;
+  const rebuildSlime = () => { clearTimeout(slimeTimer); slimeTimer = setTimeout(buildSlime, 60); };
+  buildSlime();
+  if (document.fonts) document.fonts.ready.then(rebuildSlime);
+  addEventListener('load', rebuildSlime);
+  addEventListener('resize', rebuildSlime);
+
+  /* ---------- Nachrichten vom Plugin ---------- */
+  listen('init', d => {
+    presets = d.presets || [];
+    buildPresetList();
+    applyParams(d.params || {});
+    Object.assign(DEF, d.params || {});
+    curPreset = -1;
+    showPreset(d.program ?? 0);
+    captureDef = false;
+  });
+  // Nach einem Presetwechsel kommen die neuen Werte; sie werden zum Ziel für Doppelklick
+  listen('params', obj => { applyParams(obj); if (captureDef) { Object.assign(DEF, P); captureDef = false; } });
+  listen('state', s => {
+    scope = s.scope; peak = s.peak || 0; voicesActive = s.voices || 0;
+    (s.notes || []).forEach(step => {
+      const c = spawnColony(step);
+      setTimeout(() => { c.active = false; }, 400);
+      flashKey(step);
+    });
+    if (s.kill) killVisual();
+    if (presets.length && s.program !== curPreset) showPreset(s.program);
+  });
+  send('ready');
+
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

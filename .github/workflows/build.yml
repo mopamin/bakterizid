@@ -1,0 +1,97 @@
+# Baut Bakterizid automatisch für macOS, Windows und Linux.
+# Bei jedem Push entstehen Downloads unter "Actions". Wird ein Tag wie v1.0.0 gepusht,
+# landen Installer und Archive zusätzlich als GitHub-Release.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Bauen (Universal: Apple Silicon + Intel)"
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBAKTERIZID_COPY_AFTER_BUILD=OFF \
+                -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          cmake --build build --config Release -j 4
+      - name: Installer bauen (.pkg)
+        run: installer/mac/build_pkg.sh build/Bakterizid_artefacts/Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bakterizid-macOS
+          path: dist/*
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: WebView2-SDK installieren
+        shell: pwsh
+        run: |
+          Register-PackageSource -provider NuGet -name nugetRepository -location https://www.nuget.org/api/v2 -Force
+          Install-Package Microsoft.Web.WebView2 -Scope CurrentUser -RequiredVersion 1.0.3485.44 -Source nugetRepository -Force
+      - name: Bauen
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -A x64 -DBAKTERIZID_COPY_AFTER_BUILD=OFF
+          cmake --build build --config Release -j 4
+      - name: Installer bauen (Inno Setup)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          $version = (Select-String -Path CMakeLists.txt -Pattern 'project\(Bakterizid VERSION ([0-9.]+)\)').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" installer\windows\bakterizid.iss
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build\Bakterizid_artefacts\Release\VST3\Bakterizid.vst3, build\Bakterizid_artefacts\Release\Standalone\Bakterizid.exe -DestinationPath dist\Bakterizid-Windows-ohne-Installer.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bakterizid-Windows
+          path: dist/*
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bibliotheken installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev libfreetype6-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libcurl4-openssl-dev ninja-build
+      - name: Bauen
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBAKTERIZID_COPY_AFTER_BUILD=OFF
+          cmake --build build
+      - name: Archiv packen
+        run: |
+          mkdir -p dist/Bakterizid-Linux
+          cp -r build/Bakterizid_artefacts/Release/VST3/Bakterizid.vst3 dist/Bakterizid-Linux/
+          cp build/Bakterizid_artefacts/Release/Standalone/Bakterizid dist/Bakterizid-Linux/
+          cp installer/linux/install.sh LICENSE dist/Bakterizid-Linux/
+          tar -czf dist/Bakterizid-Linux.tar.gz -C dist Bakterizid-Linux
+          rm -rf dist/Bakterizid-Linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bakterizid-Linux
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
