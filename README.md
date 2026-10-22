@@ -1,11 +1,22 @@
-# Bakterizid
+<h1 align="center">BAKTERIZID</h1>
 
-Ein Xeno-FM-Synthesizer mit einer Petrischale als Spielfläche. Kostenlos und quelloffen, als
-**VST3**, **Audio Unit** und **Standalone-App** für macOS, Windows und Linux.
+<p align="center"><b>Xeno-FM-Synthesizer mit einer Petrischale als Spielfläche</b><br>
+Kostenlos und quelloffen · VST3 · Audio Unit · Standalone · macOS, Windows, Linux</p>
 
-*A free, open-source alien FM synth (VST3 / AU / Standalone) for macOS, Windows and Linux. UI in German.*
+<p align="center"><img src="docs/screenshot.png" alt="Bakterizid: Petrischale, Regler und Tastatur" width="900"></p>
 
-**Einfach nur installieren?** → [INSTALLATION.md](INSTALLATION.md)
+<p align="center"><i>A free, open-source alien FM synth (VST3 / AU / Standalone) for macOS, Windows and Linux. UI in German.</i></p>
+
+## Download
+
+| System | Datei |
+|---|---|
+| **Mac** (Apple Silicon und Intel, ab macOS 11) | [Bakterizid-1.0.0-macOS.pkg](https://github.com/mopamin/bakterizid/releases/download/v1.0.0/Bakterizid-1.0.0-macOS.pkg) |
+| **Windows** 10 / 11 (64 Bit) | [Bakterizid-1.0.0-Windows-Setup.exe](https://github.com/mopamin/bakterizid/releases/download/v1.0.0/Bakterizid-1.0.0-Windows-Setup.exe) |
+| **Linux** | [Bakterizid-Linux.tar.gz](https://github.com/mopamin/bakterizid/releases/download/v1.0.0/Bakterizid-Linux.tar.gz) |
+
+Alle Versionen findest du unter [Releases](https://github.com/mopamin/bakterizid/releases). Die Installer sind nicht signiert. Wie du die
+Warnung beim ersten Öffnen bestätigst, steht in der [Installationsanleitung](INSTALLATION.md).
 
 ## Klang
 
@@ -35,6 +46,7 @@ Source/PluginProcessor.*  Parameter, Presets, Speichern und Laden
 Source/PluginEditor.*     Fenster mit eingebetteter Web-Oberfläche und Brücke zur Klangerzeugung
 UI/index.html             Die komplette Oberfläche (HTML, CSS, JavaScript)
 UI/fonts/                 Schriften (SIL Open Font License)
+docs/screenshot.png       Bildschirmfoto für diese Seite
 installer/                Mac-Installer (.pkg), Windows-Installer (Inno Setup), Linux-Skript
 .github/workflows/        Automatische Builds für alle drei Systeme
 ```
