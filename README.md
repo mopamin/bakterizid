@@ -9,13 +9,13 @@ Kostenlos und quelloffen · VST3 · Audio Unit · Standalone · macOS, Windows, 
 
 ## Download
 
-**Aktuelle Version: 1.0.2** ([Was ist neu?](https://github.com/mopamin/bakterizid/releases/tag/v1.0.2))
+**Aktuelle Version: 1.0.3** ([Was ist neu?](https://github.com/mopamin/bakterizid/releases/tag/v1.0.3))
 
 | System | Datei |
 |---|---|
-| **Mac** (Apple Silicon und Intel, ab macOS 11) | [Bakterizid für Mac (.pkg)](https://github.com/mopamin/bakterizid/releases/download/v1.0.2/Bakterizid-1.0.0-macOS.pkg) |
-| **Windows** 10 / 11 (64 Bit) | [Bakterizid für Windows (Setup.exe)](https://github.com/mopamin/bakterizid/releases/download/v1.0.2/Bakterizid-1.0.0-Windows-Setup.exe) |
-| **Linux** | [Bakterizid für Linux (.tar.gz)](https://github.com/mopamin/bakterizid/releases/download/v1.0.2/Bakterizid-Linux.tar.gz) |
+| **Mac** (Apple Silicon und Intel, ab macOS 11) | [Bakterizid für Mac (.pkg)](https://github.com/mopamin/bakterizid/releases/download/v1.0.3/Bakterizid-1.0.3-macOS.pkg) |
+| **Windows** 10 / 11 (64 Bit) | [Bakterizid für Windows (Setup.exe)](https://github.com/mopamin/bakterizid/releases/download/v1.0.3/Bakterizid-1.0.3-Windows-Setup.exe) |
+| **Linux** | [Bakterizid für Linux (.tar.gz)](https://github.com/mopamin/bakterizid/releases/download/v1.0.3/Bakterizid-Linux.tar.gz) |
 
 Alle Versionen findest du unter [Releases](https://github.com/mopamin/bakterizid/releases). Die Installer sind nicht signiert. Wie du die
 Warnung beim ersten Öffnen bestätigst, steht in der [Installationsanleitung](INSTALLATION.md).
@@ -97,7 +97,7 @@ cmake --build build
 ## Neue Version veröffentlichen
 
 1. Änderungen auf `main` bringen. Unter **Actions** baut GitHub bei jedem Push automatisch für Mac, Windows und Linux.
-2. Auf GitHub unter **Releases → Draft a new release** einen neuen Tag anlegen, z. B. `v1.0.3`, Ziel `main`.
+2. Auf GitHub unter **Releases → Draft a new release** einen neuen Tag anlegen, z. B. `v1.0.4`, Ziel `main`.
 3. Nach etwa 15 bis 30 Minuten hängen Installer und Archive automatisch am Release. Die Versionsnummer
    in Plugin und Dateinamen kommt dabei aus dem Tag.
 4. Die Download-Links oben in dieser README auf den neuen Tag umstellen.

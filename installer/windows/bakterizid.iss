@@ -1,9 +1,9 @@
 ; Windows-Installer für Bakterizid (Inno Setup 6)
-; Bauen:  ISCC.exe /DAppVersion=1.0.2 installer\windows\bakterizid.iss
+; Bauen:  ISCC.exe /DAppVersion=1.0.3 installer\windows\bakterizid.iss
 ; Erwartet die fertigen Dateien unter build\Bakterizid_artefacts\Release
 
 #ifndef AppVersion
-  #define AppVersion "1.0.2"
+  #define AppVersion "1.0.3"
 #endif
 #define Art "..\..\build\Bakterizid_artefacts\Release"
 
