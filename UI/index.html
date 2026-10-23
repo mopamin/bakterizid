@@ -571,6 +571,98 @@ select {
     g2.restore();
   }
 
+  /* ---------- Easter Egg: Auge am Stiel nach 15 Minuten ohne Bedienung ---------- */
+  // ?auge in der Adresse verkürzt die Wartezeit zum Ausprobieren auf 4 Sekunden
+  const IDLE_MS = /[?&]auge\b/.test(location.search) ? 4000 : 15 * 60 * 1000;
+  const smooth = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+  const eye = { state: 'hidden', p: 0, x: 0, y: 0, tx: 0, ty: 0, next: 0, blinkAt: 0, blinkStart: -9, ptr: null };
+  let lastInput = performance.now();
+
+  function wake() {
+    lastInput = performance.now();
+    if (eye.state === 'rise' || eye.state === 'look') eye.state = 'sink';
+  }
+  ['pointerdown', 'pointermove', 'keydown', 'wheel'].forEach(ev => addEventListener(ev, wake, { capture: true, passive: true }));
+  addEventListener('pointermove', e => {
+    const b = cv.getBoundingClientRect();
+    eye.ptr = { x: (e.clientX - b.left) / b.width * W, y: (e.clientY - b.top) / b.height * W };
+  }, { passive: true });
+
+  function updateEye(now) {
+    const t = now / 1000;
+    if (voicesActive) wake();   // auch Noten vom Host oder MIDI-Keyboard zählen als Bedienung
+    if (eye.state === 'hidden') {
+      if (now - lastInput > IDLE_MS) { eye.state = 'rise'; eye.blinkAt = t + 3; }
+    } else if (eye.state === 'rise') {
+      eye.p = Math.min(1, eye.p + 1 / (1.6 * 60));
+      if (eye.p >= 1) eye.state = 'look';
+    } else if (eye.state === 'sink') {
+      eye.p = Math.max(0, eye.p - 1 / (.7 * 60));
+      if (eye.p <= 0) { eye.state = 'hidden'; lastInput = now; }
+    }
+    if (eye.state !== 'hidden' && t > eye.next) {
+      // Blick springt zu einem Zufallsziel, manchmal geradeaus, manchmal zum Mauszeiger
+      if (eye.ptr && Math.random() < .35) { eye.tx = eye.ptr.x; eye.ty = eye.ptr.y; eye.aim = true; }
+      else { const a = Math.random() * 6.28, d = Math.random() < .25 ? 0 : .5 + Math.random() * .5; eye.tx = Math.cos(a) * d; eye.ty = Math.sin(a) * d * .7; eye.aim = false; }
+      eye.next = t + .7 + Math.random() * 1.6;
+    }
+    if (eye.state !== 'hidden' && t > eye.blinkAt) { eye.blinkAt = t + 2.5 + Math.random() * 3; eye.blinkStart = t; }
+  }
+
+  function drawEyeball(x, y, er, open, lx, ly) {
+    g2.save();
+    g2.beginPath(); g2.arc(x, y, er, 0, Math.PI * 2); g2.clip();
+    const sc = g2.createRadialGradient(x - er * .3, y - er * .3, er * .1, x, y, er);
+    sc.addColorStop(0, '#fffaf2'); sc.addColorStop(.75, '#f1ddd2'); sc.addColorStop(1, '#c98f8f');
+    g2.fillStyle = sc; g2.fillRect(x - er, y - er, er * 2, er * 2);
+    g2.strokeStyle = 'rgba(190,40,60,.45)'; g2.lineWidth = Math.max(1, er * .025);
+    for (let i = 0; i < 7; i++) {
+      const a = i * .9 + .3;
+      g2.beginPath(); g2.moveTo(x + Math.cos(a) * er, y + Math.sin(a) * er);
+      g2.quadraticCurveTo(x + Math.cos(a + .2) * er * .75, y + Math.sin(a + .2) * er * .75, x + Math.cos(a - .1) * er * .6, y + Math.sin(a - .1) * er * .6);
+      g2.stroke();
+    }
+    const ix = x + lx * er * .42, iy = y + ly * er * .42, ir = er * .48;
+    const ig = g2.createRadialGradient(ix, iy, ir * .2, ix, iy, ir);
+    ig.addColorStop(0, '#ffd3a8'); ig.addColorStop(.35, COL[stain]); ig.addColorStop(1, '#2a0d18');
+    g2.fillStyle = ig; g2.beginPath(); g2.arc(ix, iy, ir, 0, Math.PI * 2); g2.fill();
+    g2.fillStyle = '#0b0407'; g2.beginPath(); g2.arc(ix, iy, ir * .45, 0, Math.PI * 2); g2.fill();
+    g2.fillStyle = 'rgba(255,255,255,.85)'; g2.beginPath(); g2.arc(ix - ir * .35, iy - ir * .38, ir * .16, 0, Math.PI * 2); g2.fill();
+    // Lider: alles außerhalb der mandelförmigen Öffnung ist Haut
+    const h = er * 1.02 * open;
+    g2.fillStyle = '#6a2a3a';
+    g2.beginPath(); g2.rect(x - er * 1.1, y - er * 1.1, er * 2.2, er * 2.2);
+    if (h > er * .02) { g2.moveTo(x + er * 1.02, y); g2.ellipse(x, y, er * 1.02, h, 0, 0, Math.PI * 2, true); }
+    g2.fill('evenodd');
+    g2.strokeStyle = 'rgba(30,8,14,.7)'; g2.lineWidth = Math.max(1, er * .05);
+    g2.beginPath();
+    if (h > er * .02) g2.ellipse(x, y, er * 1.02, h, 0, 0, Math.PI * 2);
+    else { g2.moveTo(x - er, y); g2.lineTo(x + er, y); }
+    g2.stroke();
+    g2.restore();
+  }
+
+  function drawEye(now) {
+    if (eye.p <= 0) return;
+    const t = now / 1000, ph = smooth(eye.p);
+    const len = R * .55 * smooth(ph * 1.3);
+    const sway = reduced ? 0 : Math.sin(t * .9) * .6 + Math.sin(t * 2.3) * .15;
+    const bx = cx, by = cy + R * .25, ex = bx + Math.sin(sway) * len, ey = by - Math.cos(sway) * len;
+    g2.save();
+    g2.strokeStyle = '#6a2a3a'; g2.lineCap = 'round'; g2.lineWidth = R * .09 * Math.max(.3, ph);
+    g2.beginPath(); g2.moveTo(bx, by); g2.quadraticCurveTo(bx + Math.sin(sway * .3) * len * .5, by - len * .6, ex, ey); g2.stroke();
+    g2.fillStyle = 'rgba(106,42,58,.85)';
+    g2.beginPath(); g2.ellipse(bx, by, R * .12 * ph, R * .07 * ph, 0, 0, Math.PI * 2); g2.fill();
+    g2.restore();
+    // Blickziel: Zufallsrichtung oder Richtung zum Mauszeiger
+    let tx = eye.tx, ty = eye.ty;
+    if (eye.aim) { const dx = eye.tx - ex, dy = eye.ty - ey, d = Math.hypot(dx, dy) || 1; tx = dx / d; ty = dy / d; }
+    eye.x += (tx - eye.x) * .22; eye.y += (ty - eye.y) * .22;
+    const b = (t - eye.blinkStart) / .18, blink = b >= 0 && b < 1 ? 1 - Math.sin(b * Math.PI) : 1;
+    const er = R * .14 * smooth(ph * 1.2);
+    if (er > 2) drawEyeball(ex, ey, er, smooth((ph - .5) / .5) * .85 * blink, eye.x, eye.y);
+  }
+
   const meterEl = document.getElementById('meter');
   let swab = null, shownPeak = 0;
   function draw() {
@@ -582,6 +674,9 @@ select {
       else c.r += (c.target * (c.active ? 1.25 : 1) - c.r) * (c.active ? .05 : .01);
     }
     colonies.forEach(drawColony);
+    const now = performance.now();
+    updateEye(now);
+    drawEye(now);
     shownPeak = Math.max(peak, shownPeak * .92);
     meterEl.style.transform = `scaleY(${Math.min(1, shownPeak).toFixed(3)})`;
     if (scope && scope.length) {
