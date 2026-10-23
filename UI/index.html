@@ -571,6 +571,224 @@ select {
     g2.restore();
   }
 
+  /* ---------- Easter Egg: Auge am Stiel nach 15 Minuten ohne Bedienung ---------- */
+  // ?auge in der Adresse verkürzt die Wartezeit zum Ausprobieren auf 4 Sekunden
+  const IDLE_MS = /[?&]auge\b/.test(location.search) ? 4000 : 15 * 60 * 1000;
+  const smooth = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+  const eye = { state: 'hidden', p: 0, x: 0, y: 0, tx: 0, ty: 0, next: 0, blinkAt: 0, blinkStart: -9, ptr: null };
+  let lastInput = performance.now();
+
+  function wake() {
+    lastInput = performance.now();
+    if (eye.state === 'rise' || eye.state === 'look') eye.state = 'sink';
+  }
+  ['pointerdown', 'pointermove', 'keydown', 'wheel'].forEach(ev => addEventListener(ev, wake, { capture: true, passive: true }));
+  addEventListener('pointermove', e => {
+    const b = cv.getBoundingClientRect();
+    eye.ptr = { x: (e.clientX - b.left) / b.width * W, y: (e.clientY - b.top) / b.height * W };
+  }, { passive: true });
+
+  function updateEye(now) {
+    const t = now / 1000;
+    if (voicesActive) wake();   // auch Noten vom Host oder MIDI-Keyboard zählen als Bedienung
+    if (eye.state === 'hidden') {
+      if (now - lastInput > IDLE_MS) { eye.state = 'rise'; eye.blinkAt = t + 3; }
+    } else if (eye.state === 'rise') {
+      eye.p = Math.min(1, eye.p + 1 / (1.6 * 60));
+      if (eye.p >= 1) eye.state = 'look';
+    } else if (eye.state === 'sink') {
+      eye.p = Math.max(0, eye.p - 1 / (.7 * 60));
+      if (eye.p <= 0) { eye.state = 'hidden'; lastInput = now; }
+    }
+    if (eye.state !== 'hidden' && t > eye.next) {
+      // Blick springt zu einem Zufallsziel, manchmal geradeaus, manchmal zum Mauszeiger
+      if (eye.ptr && Math.random() < .35) { eye.tx = eye.ptr.x; eye.ty = eye.ptr.y; eye.aim = true; }
+      else { const a = Math.random() * 6.28, d = Math.random() < .25 ? 0 : .5 + Math.random() * .5; eye.tx = Math.cos(a) * d; eye.ty = Math.sin(a) * d * .7; eye.aim = false; }
+      eye.next = t + .7 + Math.random() * 1.6;
+    }
+    if (eye.state !== 'hidden' && t > eye.blinkAt) { eye.blinkAt = t + 2.5 + Math.random() * 3; eye.blinkStart = t; }
+  }
+
+  function drawEyeball(x, y, er, open, lx, ly) {
+    g2.save();
+    g2.beginPath(); g2.arc(x, y, er, 0, Math.PI * 2); g2.clip();
+    const sc = g2.createRadialGradient(x - er * .3, y - er * .3, er * .1, x, y, er);
+    sc.addColorStop(0, '#fffaf2'); sc.addColorStop(.75, '#f1ddd2'); sc.addColorStop(1, '#c98f8f');
+    g2.fillStyle = sc; g2.fillRect(x - er, y - er, er * 2, er * 2);
+    g2.strokeStyle = 'rgba(190,40,60,.45)'; g2.lineWidth = Math.max(1, er * .025);
+    for (let i = 0; i < 7; i++) {
+      const a = i * .9 + .3;
+      g2.beginPath(); g2.moveTo(x + Math.cos(a) * er, y + Math.sin(a) * er);
+      g2.quadraticCurveTo(x + Math.cos(a + .2) * er * .75, y + Math.sin(a + .2) * er * .75, x + Math.cos(a - .1) * er * .6, y + Math.sin(a - .1) * er * .6);
+      g2.stroke();
+    }
+    const ix = x + lx * er * .42, iy = y + ly * er * .42, ir = er * .48;
+    const ig = g2.createRadialGradient(ix, iy, ir * .2, ix, iy, ir);
+    ig.addColorStop(0, '#ffd3a8'); ig.addColorStop(.35, COL[stain]); ig.addColorStop(1, '#2a0d18');
+    g2.fillStyle = ig; g2.beginPath(); g2.arc(ix, iy, ir, 0, Math.PI * 2); g2.fill();
+    g2.fillStyle = '#0b0407'; g2.beginPath(); g2.arc(ix, iy, ir * .45, 0, Math.PI * 2); g2.fill();
+    g2.fillStyle = 'rgba(255,255,255,.85)'; g2.beginPath(); g2.arc(ix - ir * .35, iy - ir * .38, ir * .16, 0, Math.PI * 2); g2.fill();
+    // Lider: alles außerhalb der mandelförmigen Öffnung ist Haut
+    const h = er * 1.02 * open;
+    g2.fillStyle = '#6a2a3a';
+    g2.beginPath(); g2.rect(x - er * 1.1, y - er * 1.1, er * 2.2, er * 2.2);
+    if (h > er * .02) { g2.moveTo(x + er * 1.02, y); g2.ellipse(x, y, er * 1.02, h, 0, 0, Math.PI * 2, true); }
+    g2.fill('evenodd');
+    g2.strokeStyle = 'rgba(30,8,14,.7)'; g2.lineWidth = Math.max(1, er * .05);
+    g2.beginPath();
+    if (h > er * .02) g2.ellipse(x, y, er * 1.02, h, 0, 0, Math.PI * 2);
+    else { g2.moveTo(x - er, y); g2.lineTo(x + er, y); }
+    g2.stroke();
+    g2.restore();
+  }
+
+  function drawEye(now) {
+    if (eye.p <= 0) return;
+    const t = now / 1000, ph = smooth(eye.p);
+    const len = R * .55 * smooth(ph * 1.3);
+    const sway = reduced ? 0 : Math.sin(t * .9) * .6 + Math.sin(t * 2.3) * .15;
+    const bx = cx, by = cy + R * .25, ex = bx + Math.sin(sway) * len, ey = by - Math.cos(sway) * len;
+    g2.save();
+    g2.strokeStyle = '#6a2a3a'; g2.lineCap = 'round'; g2.lineWidth = R * .09 * Math.max(.3, ph);
+    g2.beginPath(); g2.moveTo(bx, by); g2.quadraticCurveTo(bx + Math.sin(sway * .3) * len * .5, by - len * .6, ex, ey); g2.stroke();
+    g2.fillStyle = 'rgba(106,42,58,.85)';
+    g2.beginPath(); g2.ellipse(bx, by, R * .12 * ph, R * .07 * ph, 0, 0, Math.PI * 2); g2.fill();
+    g2.restore();
+    // Blickziel: Zufallsrichtung oder Richtung zum Mauszeiger
+    let tx = eye.tx, ty = eye.ty;
+    if (eye.aim) { const dx = eye.tx - ex, dy = eye.ty - ey, d = Math.hypot(dx, dy) || 1; tx = dx / d; ty = dy / d; }
+    eye.x += (tx - eye.x) * .22; eye.y += (ty - eye.y) * .22;
+    const b = (t - eye.blinkStart) / .18, blink = b >= 0 && b < 1 ? 1 - Math.sin(b * Math.PI) : 1;
+    const er = R * .14 * smooth(ph * 1.2);
+    if (er > 2) drawEyeball(ex, ey, er, smooth((ph - .5) / .5) * .85 * blink, eye.x, eye.y);
+  }
+
+  /* ---------- Easter Egg: Raumschiff-Spiel, 5× schnell auf Bakterizid ---------- */
+  // Ein Schiff in der Schale gegen Kolonien, die sich bei Treffern teilen.
+  // Steuerung: Pfeile drehen und Schub, Leertaste schießt, Maus zielt und Klick schießt, Esc beendet.
+  const game = { on: false, keys: new Set(), aimAt: null, aimTime: 0, firing: false };
+  let killClicks = [];
+  killBtn.addEventListener('click', () => {
+    const now = performance.now();
+    killClicks = killClicks.filter(t => now - t < 2500).concat(now);
+    if (killClicks.length >= 5) { killClicks = []; game.on ? stopGame() : startGame(); }
+  });
+
+  function spawnBug(r, x, y, vx, vy) {
+    if (x === undefined) { const a = Math.random() * Math.PI * 2; x = Math.cos(a) * .85; y = Math.sin(a) * .85; vx = vy = 0; }
+    const st = ['neg', 'pos', 'spore', 'phage'][Math.floor(Math.random() * 4)];
+    game.bugs.push({ x, y, vx, vy, r, target: r, jit: Array.from({ length: 22 }, () => .82 + Math.random() * .3), rot: Math.random() * 6.28, color: COL[st], active: true, dead: false, alpha: 1 });
+  }
+  function startGame() {
+    Object.assign(game, { on: true, over: false, ship: { x: 0, y: 0, a: -Math.PI / 2, vx: 0, vy: 0 }, shots: [], bugs: [], sparks: [], score: 0, level: 1, cool: 0, t0: performance.now() });
+    for (let i = 0; i < 4; i++) spawnBug(.09);
+    held.forEach(keyUp);
+    document.activeElement?.blur();   // sonst löst die Leertaste den fokussierten Knopf aus
+  }
+  function stopGame() { game.on = false; game.keys.clear(); game.firing = false; }
+
+  function burst(x, y, color, n) {
+    for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, v = .2 + Math.random() * .6; game.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5 + Math.random() * .4, color }); }
+  }
+
+  function stepGame(dt) {
+    const s = game.ship, k = game.keys;
+    if (!game.over) {
+      if (k.has('ArrowLeft')) s.a -= 3.6 * dt;
+      if (k.has('ArrowRight')) s.a += 3.6 * dt;
+      if (game.aimAt && performance.now() - game.aimTime < 1500) s.a = Math.atan2(game.aimAt.y - s.y, game.aimAt.x - s.x);
+      game.thrust = k.has('ArrowUp');
+      if (game.thrust) { s.vx += Math.cos(s.a) * 1.4 * dt; s.vy += Math.sin(s.a) * 1.4 * dt; }
+      s.vx *= Math.pow(.4, dt); s.vy *= Math.pow(.4, dt);
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      const d = Math.hypot(s.x, s.y);
+      if (d > .86) { s.x *= .86 / d; s.y *= .86 / d; const nx = s.x / .86, ny = s.y / .86, dot = s.vx * nx + s.vy * ny; s.vx -= 2 * dot * nx; s.vy -= 2 * dot * ny; }
+      game.cool -= dt;
+      if ((k.has('Space') || game.firing) && game.cool <= 0) {
+        game.cool = .2;
+        game.shots.push({ x: s.x + Math.cos(s.a) * .04, y: s.y + Math.sin(s.a) * .04, vx: Math.cos(s.a) * 1.5 + s.vx, vy: Math.sin(s.a) * 1.5 + s.vy, life: .7 });
+      }
+    }
+    game.shots = game.shots.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; return b.life > 0 && Math.hypot(b.x, b.y) < .97; });
+    const speed = .1 + game.level * .025;
+    game.bugs.forEach(b => {
+      // Kolonien kriechen langsam aufs Schiff zu und prallen am Schalenrand ab
+      const dx = s.x - b.x, dy = s.y - b.y, d = Math.hypot(dx, dy) || 1;
+      b.vx += (dx / d * speed - b.vx) * dt * .8; b.vy += (dy / d * speed - b.vy) * dt * .8;
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      const m = Math.hypot(b.x, b.y), lim = .92 - b.r;
+      if (m > lim) { b.x *= lim / m; b.y *= lim / m; }
+      b.rot += dt * .4;
+      if (!game.over && d < b.r + .03) { game.over = true; burst(s.x, s.y, COL.phage, 30); }
+    });
+    game.shots.forEach(sh => {
+      const hit = game.bugs.find(b => !b.gone && Math.hypot(sh.x - b.x, sh.y - b.y) < b.r);
+      if (!hit) return;
+      sh.life = 0; hit.gone = true; game.score += 10;
+      burst(hit.x, hit.y, hit.color, 10);
+      if (hit.r > .05) {   // Zellteilung: große Kolonien zerfallen in zwei kleinere
+        const a = Math.atan2(sh.vy, sh.vx) + Math.PI / 2;
+        [1, -1].forEach(sg => spawnBug(hit.r * .62, hit.x, hit.y, Math.cos(a) * .35 * sg, Math.sin(a) * .35 * sg));
+      }
+    });
+    game.bugs = game.bugs.filter(b => !b.gone);
+    game.sparks = game.sparks.filter(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; return p.life > 0; });
+    if (!game.over && !game.bugs.length) { game.level++; for (let i = 0; i < 3 + game.level; i++) spawnBug(.09); }
+  }
+
+  function drawGame() {
+    game.bugs.forEach(drawColony);
+    g2.save();
+    g2.fillStyle = COL.phage;
+    game.shots.forEach(b => { g2.beginPath(); g2.arc(cx + b.x * R, cy + b.y * R, 2.5 * dpr, 0, Math.PI * 2); g2.fill(); });
+    game.sparks.forEach(p => { g2.globalAlpha = Math.min(1, p.life * 2); g2.fillStyle = p.color; g2.fillRect(cx + p.x * R - dpr, cy + p.y * R - dpr, 2.5 * dpr, 2.5 * dpr); });
+    g2.globalAlpha = 1;
+    const s = game.ship;
+    if (!game.over) {
+      g2.translate(cx + s.x * R, cy + s.y * R); g2.rotate(s.a);
+      const u = R * .045;
+      if (game.thrust) { g2.fillStyle = COL.spore; g2.beginPath(); g2.moveTo(-u * .7, -u * .35); g2.lineTo(-u * (1.3 + Math.random() * .5), 0); g2.lineTo(-u * .7, u * .35); g2.fill(); }
+      g2.fillStyle = '#f2e6dc'; g2.strokeStyle = '#150b10'; g2.lineWidth = 1.5 * dpr;
+      g2.beginPath(); g2.moveTo(u, 0); g2.lineTo(-u * .8, -u * .65); g2.lineTo(-u * .45, 0); g2.lineTo(-u * .8, u * .65); g2.closePath(); g2.fill(); g2.stroke();
+      g2.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    g2.fillStyle = 'rgba(21,11,16,.85)'; g2.textAlign = 'center';
+    g2.font = `500 ${13 * dpr}px "IBM Plex Mono", monospace`;
+    g2.fillText(`PUNKTE ${game.score} · WELLE ${game.level}`, cx, cy - R * .78);
+    if (game.over || performance.now() - game.t0 < 4000) {
+      g2.font = `400 ${(game.over ? 30 : 20) * dpr}px "Major Mono Display", monospace`;
+      g2.fillText(game.over ? 'resistenz!' : 'phagen-abwehr', cx, cy - R * .12);
+      g2.font = `500 ${11 * dpr}px "IBM Plex Mono", monospace`;
+      g2.fillText(game.over ? 'LEERTASTE ODER KLICK: NOCHMAL · ESC: ENDE' : '← → DREHEN · ↑ SCHUB · LEERTASTE SCHIESSEN', cx, cy + R * .02);
+      if (!game.over) g2.fillText('ODER MIT DER MAUS ZIELEN UND KLICKEN · ESC: ENDE', cx, cy + R * .1);
+    }
+    g2.restore();
+  }
+
+  const GAME_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'];
+  addEventListener('keydown', e => {
+    if (!game.on) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.code === 'Escape') return stopGame();
+    if (game.over && e.code === 'Space') return startGame();
+    if (GAME_KEYS.includes(e.code)) game.keys.add(e.code);
+  }, true);
+  addEventListener('keyup', e => { if (game.on) { game.keys.delete(e.code); e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+  addEventListener('blur', () => game.keys.clear());
+  function gamePointer(e) {
+    const b = cv.getBoundingClientRect();
+    game.aimAt = { x: ((e.clientX - b.left) / b.width * W - cx) / R, y: ((e.clientY - b.top) / b.height * W - cy) / R };
+    game.aimTime = performance.now();
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (!game.on) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    if (game.over) return startGame();
+    gamePointer(e); game.firing = true;
+  }, true);
+  cv.addEventListener('pointermove', e => { if (game.on) { gamePointer(e); e.stopImmediatePropagation(); } }, true);
+  addEventListener('pointerup', () => { game.firing = false; });
+
   const meterEl = document.getElementById('meter');
   let swab = null, shownPeak = 0;
   function draw() {
@@ -581,7 +799,17 @@ select {
       if (c.dead) { c.r *= .985; c.alpha *= .965; if (c.alpha < .02) { colonies.splice(i, 1); continue; } }
       else c.r += (c.target * (c.active ? 1.25 : 1) - c.r) * (c.active ? .05 : .01);
     }
-    colonies.forEach(drawColony);
+    const now = performance.now();
+    if (game.on) {
+      stepGame(Math.min(.05, (now - (game.last || now)) / 1000));
+      game.last = now;
+      drawGame();
+    } else {
+      game.last = 0;
+      colonies.forEach(drawColony);
+      updateEye(now);
+      drawEye(now);
+    }
     shownPeak = Math.max(peak, shownPeak * .92);
     meterEl.style.transform = `scaleY(${Math.min(1, shownPeak).toFixed(3)})`;
     if (scope && scope.length) {
