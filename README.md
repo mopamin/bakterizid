@@ -9,11 +9,13 @@ Kostenlos und quelloffen · VST3 · Audio Unit · Standalone · macOS, Windows, 
 
 ## Download
 
+**Aktuelle Version: 1.0.2** ([Was ist neu?](https://github.com/mopamin/bakterizid/releases/tag/v1.0.2))
+
 | System | Datei |
 |---|---|
-| **Mac** (Apple Silicon und Intel, ab macOS 11) | [Bakterizid-1.0.0-macOS.pkg](https://github.com/mopamin/bakterizid/releases/download/v1.0.0/Bakterizid-1.0.0-macOS.pkg) |
-| **Windows** 10 / 11 (64 Bit) | [Bakterizid-1.0.0-Windows-Setup.exe](https://github.com/mopamin/bakterizid/releases/download/v1.0.0/Bakterizid-1.0.0-Windows-Setup.exe) |
-| **Linux** | [Bakterizid-Linux.tar.gz](https://github.com/mopamin/bakterizid/releases/download/v1.0.0/Bakterizid-Linux.tar.gz) |
+| **Mac** (Apple Silicon und Intel, ab macOS 11) | [Bakterizid für Mac (.pkg)](https://github.com/mopamin/bakterizid/releases/download/v1.0.2/Bakterizid-1.0.0-macOS.pkg) |
+| **Windows** 10 / 11 (64 Bit) | [Bakterizid für Windows (Setup.exe)](https://github.com/mopamin/bakterizid/releases/download/v1.0.2/Bakterizid-1.0.0-Windows-Setup.exe) |
+| **Linux** | [Bakterizid für Linux (.tar.gz)](https://github.com/mopamin/bakterizid/releases/download/v1.0.2/Bakterizid-Linux.tar.gz) |
 
 Alle Versionen findest du unter [Releases](https://github.com/mopamin/bakterizid/releases). Die Installer sind nicht signiert. Wie du die
 Warnung beim ersten Öffnen bestätigst, steht in der [Installationsanleitung](INSTALLATION.md).
@@ -36,6 +38,16 @@ Dazu:
 - **Stimmungen:** Terra 12 (normal), Xeno 19, Bohlen-Pierce, Obertonreihe.
 - **Zellteilung:** Zufalls-Arpeggiator. **Bakterizid:** tötet alle Stimmen mit einem Rauschsturz ab.
 - Alle Regler sind in der DAW automatisierbar.
+
+## Easter Eggs
+
+In der Petrischale lebt mehr, als man auf den ersten Blick sieht:
+
+- **Das Auge:** Lass Bakterizid 15 Minuten lang in Ruhe. Dann wächst etwas aus dem Agar und schaut sich um.
+  Sobald du die Maus bewegst oder eine Note spielst, versteckt es sich wieder.
+- **Phagen-Abwehr:** Klick fünfmal schnell hintereinander auf **Bakterizid**. Dann startet ein kleines
+  Raumschiff-Spiel gegen die Kolonien. Steuerung mit den Pfeiltasten und der Leertaste oder mit der Maus,
+  Esc beendet das Spiel.
 
 ## Aufbau des Projekts
 
@@ -82,17 +94,13 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-## Auf GitHub veröffentlichen
+## Neue Version veröffentlichen
 
-1. Neues Repository auf GitHub anlegen und diesen Ordner hochladen (ohne `build/` und `JUCE/`, die
-   `.gitignore` sorgt dafür).
-2. Unter **Actions** baut GitHub automatisch für Mac, Windows und Linux.
-3. Für ein Release einen Tag setzen, z. B.:
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-   Dann erscheinen Installer und Archive unter **Releases**.
+1. Änderungen auf `main` bringen. Unter **Actions** baut GitHub bei jedem Push automatisch für Mac, Windows und Linux.
+2. Auf GitHub unter **Releases → Draft a new release** einen neuen Tag anlegen, z. B. `v1.0.3`, Ziel `main`.
+3. Nach etwa 15 bis 30 Minuten hängen Installer und Archive automatisch am Release. Die Versionsnummer
+   in Plugin und Dateinamen kommt dabei aus dem Tag.
+4. Die Download-Links oben in dieser README auf den neuen Tag umstellen.
 
 Die Installer sind **nicht signiert**. Mac und Windows zeigen deshalb beim ersten Öffnen eine Warnung.
 Wie man sie bestätigt, steht in [INSTALLATION.md](INSTALLATION.md).
