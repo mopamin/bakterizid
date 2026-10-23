@@ -1,6 +1,7 @@
 # Baut Bakterizid automatisch für macOS, Windows und Linux.
-# Bei jedem Push entstehen Downloads unter "Actions". Wird ein Tag wie v1.0.0 gepusht,
-# landen Installer und Archive zusätzlich als GitHub-Release.
+# Bei jedem Push entstehen Downloads unter "Actions". Wird ein Tag wie v1.0.3 gepusht,
+# landen Installer und Archive zusätzlich als GitHub-Release. Die Versionsnummer
+# kommt dann aus dem Tag, CMakeLists.txt muss dafür nicht angepasst werden.
 name: Build
 
 on:
@@ -15,9 +16,13 @@ permissions:
 
 jobs:
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Versionsnummer aus dem Tag übernehmen
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: perl -pi -e "s/^project\(Bakterizid VERSION [0-9.]+\)/project(Bakterizid VERSION ${GITHUB_REF_NAME#v})/" CMakeLists.txt
       - name: "Bauen (Universal: Apple Silicon + Intel)"
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DBAKTERIZID_COPY_AFTER_BUILD=OFF \
@@ -34,6 +39,10 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
+      - name: Versionsnummer aus dem Tag übernehmen
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: perl -pi -e "s/^project\(Bakterizid VERSION [0-9.]+\)/project(Bakterizid VERSION ${GITHUB_REF_NAME#v})/" CMakeLists.txt
       - name: WebView2-SDK installieren
         shell: pwsh
         run: |
@@ -60,6 +69,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      - name: Versionsnummer aus dem Tag übernehmen
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: perl -pi -e "s/^project\(Bakterizid VERSION [0-9.]+\)/project(Bakterizid VERSION ${GITHUB_REF_NAME#v})/" CMakeLists.txt
       - name: Bibliotheken installieren
         run: |
           sudo apt-get update
