@@ -663,6 +663,132 @@ select {
     if (er > 2) drawEyeball(ex, ey, er, smooth((ph - .5) / .5) * .85 * blink, eye.x, eye.y);
   }
 
+  /* ---------- Easter Egg: Raumschiff-Spiel, 5× schnell auf Bakterizid ---------- */
+  // Ein Schiff in der Schale gegen Kolonien, die sich bei Treffern teilen.
+  // Steuerung: Pfeile drehen und Schub, Leertaste schießt, Maus zielt und Klick schießt, Esc beendet.
+  const game = { on: false, keys: new Set(), aimAt: null, aimTime: 0, firing: false };
+  let killClicks = [];
+  killBtn.addEventListener('click', () => {
+    const now = performance.now();
+    killClicks = killClicks.filter(t => now - t < 2500).concat(now);
+    if (killClicks.length >= 5) { killClicks = []; game.on ? stopGame() : startGame(); }
+  });
+
+  function spawnBug(r, x, y, vx, vy) {
+    if (x === undefined) { const a = Math.random() * Math.PI * 2; x = Math.cos(a) * .85; y = Math.sin(a) * .85; vx = vy = 0; }
+    const st = ['neg', 'pos', 'spore', 'phage'][Math.floor(Math.random() * 4)];
+    game.bugs.push({ x, y, vx, vy, r, target: r, jit: Array.from({ length: 22 }, () => .82 + Math.random() * .3), rot: Math.random() * 6.28, color: COL[st], active: true, dead: false, alpha: 1 });
+  }
+  function startGame() {
+    Object.assign(game, { on: true, over: false, ship: { x: 0, y: 0, a: -Math.PI / 2, vx: 0, vy: 0 }, shots: [], bugs: [], sparks: [], score: 0, level: 1, cool: 0, t0: performance.now() });
+    for (let i = 0; i < 4; i++) spawnBug(.09);
+    held.forEach(keyUp);
+    document.activeElement?.blur();   // sonst löst die Leertaste den fokussierten Knopf aus
+  }
+  function stopGame() { game.on = false; game.keys.clear(); game.firing = false; }
+
+  function burst(x, y, color, n) {
+    for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, v = .2 + Math.random() * .6; game.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: .5 + Math.random() * .4, color }); }
+  }
+
+  function stepGame(dt) {
+    const s = game.ship, k = game.keys;
+    if (!game.over) {
+      if (k.has('ArrowLeft')) s.a -= 3.6 * dt;
+      if (k.has('ArrowRight')) s.a += 3.6 * dt;
+      if (game.aimAt && performance.now() - game.aimTime < 1500) s.a = Math.atan2(game.aimAt.y - s.y, game.aimAt.x - s.x);
+      game.thrust = k.has('ArrowUp');
+      if (game.thrust) { s.vx += Math.cos(s.a) * 1.4 * dt; s.vy += Math.sin(s.a) * 1.4 * dt; }
+      s.vx *= Math.pow(.4, dt); s.vy *= Math.pow(.4, dt);
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      const d = Math.hypot(s.x, s.y);
+      if (d > .86) { s.x *= .86 / d; s.y *= .86 / d; const nx = s.x / .86, ny = s.y / .86, dot = s.vx * nx + s.vy * ny; s.vx -= 2 * dot * nx; s.vy -= 2 * dot * ny; }
+      game.cool -= dt;
+      if ((k.has('Space') || game.firing) && game.cool <= 0) {
+        game.cool = .2;
+        game.shots.push({ x: s.x + Math.cos(s.a) * .04, y: s.y + Math.sin(s.a) * .04, vx: Math.cos(s.a) * 1.5 + s.vx, vy: Math.sin(s.a) * 1.5 + s.vy, life: .7 });
+      }
+    }
+    game.shots = game.shots.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; return b.life > 0 && Math.hypot(b.x, b.y) < .97; });
+    const speed = .1 + game.level * .025;
+    game.bugs.forEach(b => {
+      // Kolonien kriechen langsam aufs Schiff zu und prallen am Schalenrand ab
+      const dx = s.x - b.x, dy = s.y - b.y, d = Math.hypot(dx, dy) || 1;
+      b.vx += (dx / d * speed - b.vx) * dt * .8; b.vy += (dy / d * speed - b.vy) * dt * .8;
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      const m = Math.hypot(b.x, b.y), lim = .92 - b.r;
+      if (m > lim) { b.x *= lim / m; b.y *= lim / m; }
+      b.rot += dt * .4;
+      if (!game.over && d < b.r + .03) { game.over = true; burst(s.x, s.y, COL.phage, 30); }
+    });
+    game.shots.forEach(sh => {
+      const hit = game.bugs.find(b => !b.gone && Math.hypot(sh.x - b.x, sh.y - b.y) < b.r);
+      if (!hit) return;
+      sh.life = 0; hit.gone = true; game.score += 10;
+      burst(hit.x, hit.y, hit.color, 10);
+      if (hit.r > .05) {   // Zellteilung: große Kolonien zerfallen in zwei kleinere
+        const a = Math.atan2(sh.vy, sh.vx) + Math.PI / 2;
+        [1, -1].forEach(sg => spawnBug(hit.r * .62, hit.x, hit.y, Math.cos(a) * .35 * sg, Math.sin(a) * .35 * sg));
+      }
+    });
+    game.bugs = game.bugs.filter(b => !b.gone);
+    game.sparks = game.sparks.filter(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; return p.life > 0; });
+    if (!game.over && !game.bugs.length) { game.level++; for (let i = 0; i < 3 + game.level; i++) spawnBug(.09); }
+  }
+
+  function drawGame() {
+    game.bugs.forEach(drawColony);
+    g2.save();
+    g2.fillStyle = COL.phage;
+    game.shots.forEach(b => { g2.beginPath(); g2.arc(cx + b.x * R, cy + b.y * R, 2.5 * dpr, 0, Math.PI * 2); g2.fill(); });
+    game.sparks.forEach(p => { g2.globalAlpha = Math.min(1, p.life * 2); g2.fillStyle = p.color; g2.fillRect(cx + p.x * R - dpr, cy + p.y * R - dpr, 2.5 * dpr, 2.5 * dpr); });
+    g2.globalAlpha = 1;
+    const s = game.ship;
+    if (!game.over) {
+      g2.translate(cx + s.x * R, cy + s.y * R); g2.rotate(s.a);
+      const u = R * .045;
+      if (game.thrust) { g2.fillStyle = COL.spore; g2.beginPath(); g2.moveTo(-u * .7, -u * .35); g2.lineTo(-u * (1.3 + Math.random() * .5), 0); g2.lineTo(-u * .7, u * .35); g2.fill(); }
+      g2.fillStyle = '#f2e6dc'; g2.strokeStyle = '#150b10'; g2.lineWidth = 1.5 * dpr;
+      g2.beginPath(); g2.moveTo(u, 0); g2.lineTo(-u * .8, -u * .65); g2.lineTo(-u * .45, 0); g2.lineTo(-u * .8, u * .65); g2.closePath(); g2.fill(); g2.stroke();
+      g2.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    g2.fillStyle = 'rgba(21,11,16,.85)'; g2.textAlign = 'center';
+    g2.font = `500 ${13 * dpr}px "IBM Plex Mono", monospace`;
+    g2.fillText(`PUNKTE ${game.score} · WELLE ${game.level}`, cx, cy - R * .78);
+    if (game.over || performance.now() - game.t0 < 4000) {
+      g2.font = `400 ${(game.over ? 30 : 20) * dpr}px "Major Mono Display", monospace`;
+      g2.fillText(game.over ? 'resistenz!' : 'phagen-abwehr', cx, cy - R * .12);
+      g2.font = `500 ${11 * dpr}px "IBM Plex Mono", monospace`;
+      g2.fillText(game.over ? 'LEERTASTE ODER KLICK: NOCHMAL · ESC: ENDE' : '← → DREHEN · ↑ SCHUB · LEERTASTE SCHIESSEN', cx, cy + R * .02);
+      if (!game.over) g2.fillText('ODER MIT DER MAUS ZIELEN UND KLICKEN · ESC: ENDE', cx, cy + R * .1);
+    }
+    g2.restore();
+  }
+
+  const GAME_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'];
+  addEventListener('keydown', e => {
+    if (!game.on) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.code === 'Escape') return stopGame();
+    if (game.over && e.code === 'Space') return startGame();
+    if (GAME_KEYS.includes(e.code)) game.keys.add(e.code);
+  }, true);
+  addEventListener('keyup', e => { if (game.on) { game.keys.delete(e.code); e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+  addEventListener('blur', () => game.keys.clear());
+  function gamePointer(e) {
+    const b = cv.getBoundingClientRect();
+    game.aimAt = { x: ((e.clientX - b.left) / b.width * W - cx) / R, y: ((e.clientY - b.top) / b.height * W - cy) / R };
+    game.aimTime = performance.now();
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (!game.on) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    if (game.over) return startGame();
+    gamePointer(e); game.firing = true;
+  }, true);
+  cv.addEventListener('pointermove', e => { if (game.on) { gamePointer(e); e.stopImmediatePropagation(); } }, true);
+  addEventListener('pointerup', () => { game.firing = false; });
+
   const meterEl = document.getElementById('meter');
   let swab = null, shownPeak = 0;
   function draw() {
@@ -673,10 +799,17 @@ select {
       if (c.dead) { c.r *= .985; c.alpha *= .965; if (c.alpha < .02) { colonies.splice(i, 1); continue; } }
       else c.r += (c.target * (c.active ? 1.25 : 1) - c.r) * (c.active ? .05 : .01);
     }
-    colonies.forEach(drawColony);
     const now = performance.now();
-    updateEye(now);
-    drawEye(now);
+    if (game.on) {
+      stepGame(Math.min(.05, (now - (game.last || now)) / 1000));
+      game.last = now;
+      drawGame();
+    } else {
+      game.last = 0;
+      colonies.forEach(drawColony);
+      updateEye(now);
+      drawEye(now);
+    }
     shownPeak = Math.max(peak, shownPeak * .92);
     meterEl.style.transform = `scaleY(${Math.min(1, shownPeak).toFixed(3)})`;
     if (scope && scope.length) {
